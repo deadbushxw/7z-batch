@@ -911,12 +911,23 @@ def compress_job(z: SevenZip, workdir: Path, picked: list[PlanItem], ctx: JobCtx
     return {"ok": ok, "fail": fail, "total": total}
 
 
-def extract_job(z: SevenZip, targets: list[Path], outdir: Path, ctx: JobCtx) -> dict:
-    """解压到临时目录 → 逐文件加 MARK 前缀搬到输出目录（保留包内层级）。"""
+def extract_job(
+    z: SevenZip, targets: list[Path], outdir: Path, ctx: JobCtx, mark: bool = True
+) -> dict:
+    """
+    解压到临时目录 → 搬到输出目录（保留包内层级）。
+
+    mark=True（默认）把文件名改成 _{原名}：和压缩后留在原地的源文件区分开，
+    也因此能被「一键删除」扫到。mark=False 则还原成包内的原始文件名。
+    """
     outdir.mkdir(parents=True, exist_ok=True)
     total = len(targets)
     ok = fail = 0
-    ctx.log(f"开始解压 {total} 个包 → {outdir}", "info")
+    ctx.log(
+        f"开始解压 {total} 个包 → {outdir}"
+        + ("，文件名加 " + MARK + " 前缀" if mark else "，还原为原始文件名"),
+        "info",
+    )
 
     for n, arc in enumerate(targets, 1):
         if ctx.cancel.is_set():
@@ -955,7 +966,9 @@ def extract_job(z: SevenZip, targets: list[Path], outdir: Path, ctx: JobCtx) -> 
                 try:
                     dest_dir = outdir / rel.parent
                     dest_dir.mkdir(parents=True, exist_ok=True)
-                    dest = unique_path(dest_dir / (MARK + f.name))
+                    # 只对文件名加前缀，包内层级原样保留
+                    out_name = (MARK + f.name) if mark else f.name
+                    dest = unique_path(dest_dir / out_name)
                     shutil.move(str(f), str(dest))
                     moved.append(dest.name)
                 except OSError as exc:
@@ -985,6 +998,22 @@ def default_workdir() -> Path:
     if (SCRIPT_DIR.parent / LAUNCHER_NAME).is_file():
         return SCRIPT_DIR.parent
     return SCRIPT_DIR
+
+
+def initial_workdir(cfg: dict) -> Path:
+    """
+    首次打开时用哪个目录：优先用上次记住的，它不在了（比如整个项目被挪走）就回到默认位置。
+
+    注意必须先判空再建 Path：Path("") 等于 Path(".")，而 "." 是存在的目录，
+    只写 saved.is_dir() 会把工作目录悄悄变成进程的当前目录——
+    从别的目录启动时就会扫错地方（表现为「没有压缩包」）。
+    """
+    saved_raw = str(cfg.get("workdir") or "").strip()
+    if saved_raw:
+        saved = Path(saved_raw)
+        if saved.is_dir():
+            return saved
+    return default_workdir()
 
 
 def load_config() -> dict:
@@ -1155,9 +1184,7 @@ class App:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.cfg = load_config()
-        # 优先用上次的工作目录；它不在了（比如整个项目被挪走）就回到默认位置
-        saved = Path(self.cfg.get("workdir") or "")
-        self.workdir = saved if saved.is_dir() else default_workdir()
+        self.workdir = initial_workdir(self.cfg)
 
         self.seven_exe = find_7z()
         self.msg_q: queue.Queue = queue.Queue()
@@ -1408,8 +1435,15 @@ class App:
         ttk.Button(out_row, text="用工作目录", command=lambda: self.outdir_var.set("")).pack(
             side="left", padx=6
         )
-        ttk.Label(
-            out_row, text=f"（留空 = 工作目录；解出的文件统一加 {MARK} 前缀）", foreground="#777"
+        ttk.Label(out_row, text="（留空 = 工作目录）", foreground="#777").pack(side="left")
+
+        opt_row = ttk.Frame(tab)
+        opt_row.pack(fill="x", pady=(0, 6))
+        self.extract_mark = tk.BooleanVar(value=bool(self.cfg.get("extract_mark", True)))
+        ttk.Checkbutton(
+            opt_row,
+            text=f"解压出的文件加 {MARK} 前缀（便于一键删除；取消勾选则还原成包内原始文件名）",
+            variable=self.extract_mark,
         ).pack(side="left")
 
         inner_row = ttk.Frame(tab)
@@ -1985,7 +2019,11 @@ class App:
             messagebox.showinfo("没有可用包", f"{label} 当天没有可用压缩包。")
             return
         outdir = self._outdir()
-        self._start(lambda z, ctx: extract_job(z, targets, outdir, ctx), f"按天解压 {label}…")
+        mark = self.extract_mark.get()
+        self._start(
+            lambda z, ctx: extract_job(z, targets, outdir, ctx, mark),
+            f"按天解压 {label}…",
+        )
 
     def start_extract_seq(self):
         targets = self.seq_list.selected_payloads()
@@ -1993,8 +2031,9 @@ class App:
             messagebox.showinfo("请选择序号", f"请在列表里点选要解压的包。\n{PICK_HINT}")
             return
         outdir = self._outdir()
+        mark = self.extract_mark.get()
         self._start(
-            lambda z, ctx: extract_job(z, targets, outdir, ctx),
+            lambda z, ctx: extract_job(z, targets, outdir, ctx, mark),
             f"解压选中的 {len(targets)} 个包…",
         )
 
@@ -2004,8 +2043,9 @@ class App:
             messagebox.showinfo("请选择包", f"请在左侧「可选压缩包」里点选。\n{PICK_HINT}")
             return
         outdir = self._outdir()
+        mark = self.extract_mark.get()
         self._start(
-            lambda z, ctx: extract_job(z, targets, outdir, ctx),
+            lambda z, ctx: extract_job(z, targets, outdir, ctx, mark),
             f"解压选中的 {len(targets)} 个包…",
         )
 
@@ -2118,6 +2158,7 @@ class App:
                 "winsize": f"{self.root.winfo_width()}x{self.root.winfo_height()}",
                 "include_marked": self.include_marked.get(),
                 "include_dotted": self.include_dotted.get(),
+                "extract_mark": self.extract_mark.get(),
                 "full_verify": self.full_verify.get(),
             }
         )

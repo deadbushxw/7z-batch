@@ -38,7 +38,7 @@ LICENSE               MIT
 .gitattributes        钉死换行（*.cmd 必须 CRLF）
 zbatch/               工具本体
   zbatch.py             主程序（单文件，约 2100 行）
-  zbatch_selftest.py    端到端自测，116 条断言，在 %TEMP% 下造数据，不碰你的文件
+  zbatch_selftest.py    端到端自测，128 条断言，在 %TEMP% 下造数据，不碰你的文件
   zbatch.config.json    首次关闭窗口时生成，记住上次的工作目录、窗口尺寸和几个勾选项
 ```
 
@@ -159,11 +159,19 @@ zbatch/               工具本体
 
 解压本身的行为：
 
-- 先解到临时目录，再把每个文件**只对文件名**加 `_` 前缀，移动到输出目录
-- 包内的相对层级会保留，`_` 只加在最内层的文件名上
+- 先解到临时目录，再移动到输出目录
+- 包内的相对层级会保留，前缀只加在最内层的文件名上
 - 目标重名时自动追加 `-2`、`-3`，**绝不覆盖**
-- 解出的清单 txt 也带 `_` 前缀，日志里会标注「目录文件，不是原始文件」
 - 输出目录默认为工作目录，建议**另选一个空目录**——否则解出的文件会和工作目录里压缩时留下的 `_原名` 撞名，变成 `_原名-2`
+
+**「解压出的文件加 `_` 前缀」勾选框**（解压页顶部，三种模式共用，默认开）：
+
+| 状态 | 解出的文件名 | 用途 |
+|---|---|---|
+| 勾选（默认） | `_报告.docx` | 和压缩后留在原地的 `_原名` 一致，能被「一键删除」一次清干净 |
+| 取消勾选 | `报告.docx` | 还原成包内的原始文件名，适合把归档取出来直接使用 |
+
+取消勾选时同样不会覆盖已有文件（重名的变成 `报告-2.docx`）。这个状态会被记住。
 
 ### 一键删除
 
@@ -250,7 +258,7 @@ zbatch/               工具本体
 python zbatch\zbatch_selftest.py
 ```
 
-在 `%TEMP%\zbatch_e2e\` 下造真实数据跑完整闭环，覆盖 116 条断言：分天编号、同一天二次压缩的序号顺延与不覆盖、目录包全量累计、多文件包与嵌套包的清单记录、0 字节文件、一键删除范围、三种解压模式、重名 `-2` 顺延、包内层级保留、密码错误时的优雅跳过、界面日期下拉的接线、列表的点选 / Shift 选区间语义，以及目录包解析（含旧格式兜底、清单过期检测、密码不对时的降级）。逐条打印 PASS/FAIL，有失败则退出码非 0。
+在 `%TEMP%\zbatch_e2e\` 下造真实数据跑完整闭环，覆盖 128 条断言：分天编号、同一天二次压缩的序号顺延与不覆盖、目录包全量累计、多文件包与嵌套包的清单记录、0 字节文件、一键删除范围、三种解压模式、重名 `-2` 顺延、包内层级保留、密码错误时的优雅跳过、界面日期下拉的接线、列表的点选 / Shift 选区间语义，以及目录包解析（含旧格式兜底、清单过期检测、密码不对时的降级）。逐条打印 PASS/FAIL，有失败则退出码非 0。
 
 ---
 
@@ -299,4 +307,4 @@ python zbatch\zbatch_selftest.py
 
 `zbatch` is a lightweight Windows GUI wrapper around `7z.exe` for day-bucketed archiving: it packs each file into its own encrypted archive named `YYYYMMDDNN.7z`, writes a per-day manifest archive `YYYYMMDDindex.7z` listing the original filenames, renames the sources with a `_` prefix for one-click cleanup, and can restore everything through three batch-extract modes. The extract view can show the original filenames inside each archive — read from the per-day manifest when possible, falling back to opening individual archives when a manifest is missing or stale.
 
-Built as a single Python file with tkinter and **no third-party dependencies**. It always encrypts (AES-256, encrypted filenames) and refuses empty passwords. Every archive is verified right after packing — 7-Zip silently produces empty archives for filenames containing `*` or `?` while reporting success, so verification is mandatory rather than optional. Run `python zbatch\zbatch_selftest.py` for the 116-assertion end-to-end suite.
+Built as a single Python file with tkinter and **no third-party dependencies**. It always encrypts (AES-256, encrypted filenames) and refuses empty passwords. Every archive is verified right after packing — 7-Zip silently produces empty archives for filenames containing `*` or `?` while reporting success, so verification is mandatory rather than optional. Run `python zbatch\zbatch_selftest.py` for the 128-assertion end-to-end suite.

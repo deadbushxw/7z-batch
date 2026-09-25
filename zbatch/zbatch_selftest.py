@@ -184,6 +184,23 @@ def main():
     zb.extract_job(Z.inst, [WORK / names["20260923"][1]], outdir, c)
     check("重名自动 -2 不覆盖", (outdir / "_日报 1-2.txt").is_file())
 
+    print("\n== 解压时是否加 _ 前缀（mark 开关，默认开）==")
+    plain = ROOT / "plain-out"
+    c, _l = new_ctx()
+    res = zb.extract_job(Z.inst, [WORK / names["20260923"][1]], plain, c, mark=False)
+    check("mark=False 解压成功", res == {"ok": 1, "fail": 0, "total": 1}, str(res))
+    check("mark=False 还原成包内原始文件名", (plain / "日报 1.txt").is_file(),
+          str(sorted(p.name for p in plain.iterdir())))
+    check("mark=False 时不带 _ 前缀",
+          not any(p.name.startswith("_") for p in plain.iterdir()),
+          str(sorted(p.name for p in plain.iterdir())))
+    check("mark=False 内容正确",
+          (plain / "日报 1.txt").read_text(encoding="utf-8") == "day1 file 1\n")
+    c, _l = new_ctx()
+    zb.extract_job(Z.inst, [WORK / names["20260923"][1]], plain, c, mark=False)
+    check("mark=False 重名同样 -2，不覆盖", (plain / "日报 1-2.txt").is_file(),
+          str(sorted(p.name for p in plain.iterdir())))
+
     print("\n== 包内带子目录的解压 ==")
     nest = ROOT / "nest"
     make(nest, "层1/内层文件.txt", "deep\n", (2026, 9, 24, 10, 0, 0))
@@ -442,6 +459,21 @@ def main():
           and not zb.is_dotfile("env") and not zb.is_dotfile("季度报告.docx"))
     check("项目根上的 .gitattributes 不会被当成素材",
           not any(p.name == ".gitattributes" for p in zb.scan_candidates(only, True)))
+
+    # ---------------------------------------------------------------- 工作目录初始化
+    print("\n== 工作目录初始化（回归：Path('') 等于 Path('.')）==")
+    check("Path('').is_dir() 居然为真 —— 这就是当初把目录跑偏的坑", Path("").is_dir())
+    check("空配置回落到默认位置", zb.initial_workdir({}) == zb.default_workdir())
+    check("workdir 为空串时回落（而不是变成当前目录）",
+          zb.initial_workdir({"workdir": ""}) == zb.default_workdir())
+    check("workdir 只有空白字符时同样回落",
+          zb.initial_workdir({"workdir": "   "}) == zb.default_workdir())
+    check("workdir 指向不存在的路径时回落",
+          zb.initial_workdir({"workdir": str(ROOT / "no-such-dir")}) == zb.default_workdir())
+    check("workdir 合法时沿用它",
+          zb.initial_workdir({"workdir": str(WORK)}) == WORK)
+    check("从别的当前目录构造也不会跑偏（不依赖进程 cwd）",
+          zb.initial_workdir({}) != Path("."))
 
     print("\n" + "=" * 62)
     if FAILS:
