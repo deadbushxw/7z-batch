@@ -1,0 +1,17 @@
+# 本机状态：记的是这台机器上的工作目录、窗口尺寸等，不该进版本库
+zbatch/zbatch.config.json
+
+# Python 字节码
+__pycache__/
+*.pyc
+
+# 工具产出的归档数据。
+# 这是给「把本仓库放在归档文件夹里」这种用法准备的 —— 你的 7z 包属于私人数据，
+*.7z
+*.7z.tmp
+
+# 编辑器 / 系统杂物
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

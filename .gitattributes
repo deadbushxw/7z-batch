@@ -1,0 +1,10 @@
+# 批处理文件必须是 CRLF。LF-only 的 .cmd 会被 cmd.exe 错位解析
+# （症状：注释里一个多字节字符就能把 "rem" 吃成 "m"，然后报 'm' 不是内部或外部命令）。
+# 这里钉死换行，保证 clone 和从 GitHub 下 ZIP 拿到的都是 CRLF。
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 源码与文档统一 LF，避免跨平台 diff 噪音
+*.py   text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
